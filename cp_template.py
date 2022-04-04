@@ -1,10 +1,10 @@
 import os
 import sys
+from pathlib import Path
 
 from coleo import Argument, auto_cli
 from pystache import Renderer
 from pystache.context import KeyNotFoundError
-
 
 render = Renderer(missing_tags="strict")
 
@@ -27,9 +27,21 @@ def run():
     # Path to the file or directory to copy
     path: Argument
 
+    # [positional]
+    # The destination's parent directory (optional)
+    dest: Argument
+
     # [positional: *]
     # key=value pairs to substitute
     env: Argument
+
+    if not Path(dest).exists():
+        env.insert(0, dest)
+        dest = "."
+
+    if not all("=" in k for k in env):
+        sys.exit("Error: arguments after path and dest should all be key=value pairs.")
+
     env_dict = dict(k.split("=") for k in env)
 
     full_path = os.path.abspath(path)
@@ -42,8 +54,6 @@ def run():
     if not base.endswith("/"):
         base += "/"
     base_length = len(base)
-
-    new_base = "."
 
     gen = {}
 
@@ -58,13 +68,13 @@ def run():
             full = os.path.join(dirname, d)
             relative = full[base_length:]
             new_relative = transform(full, relative, env_dict)
-            gen[os.path.join(new_base, new_relative)] = None
+            gen[os.path.join(dest, new_relative)] = None
 
         for f in files:
             full = os.path.join(dirname, f)
             relative = full[base_length:]
             new_relative = transform(relative, relative, env_dict)
-            gen[os.path.join(new_base, new_relative)] = transform(
+            gen[os.path.join(dest, new_relative)] = transform(
                 full, open(full).read(), env_dict
             )
 
