@@ -44,33 +44,42 @@ def run():
     # Path to the file or directory to copy
     path: Argument
 
-    # [positional: ?]
-    # The destination's parent directory (default: .)
+    # [positional]
+    # The destination file or directory
     dest: Argument
 
     # [positional: *]
     # key=value pairs to substitute
     env: Argument
 
-    if not Path(dest).exists():
-        env.insert(0, dest)
-        dest = "."
-
     if not all("=" in k for k in env):
         sys.exit("Error: arguments after path and dest should all be key=value pairs.")
 
     env_dict = dict(k.split("=") for k in env)
 
-    full_path = os.path.abspath(path)
-
+    full_path = Path(path).absolute()
     if not os.path.exists(full_path):
-        print(f"Error: {full_path} does not exist", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(f"Error: template '{full_path}' does not exist")
+
+    dest = Path(dest)
+    if dest.exists():
+        sys.exit(f"Error: destination '{dest}' must not exist")
+
+    stem = full_path.stem
+    if "{{" in stem:
+        if stem.startswith("{{") and stem.endswith("}}"):
+            env_dict[stem[2:-2]] = dest.stem
+        else:
+            sys.exit(
+                "Error: If the template path contains a template it must encompass the full stem"
+            )
+
+    env_dict["STEM"] = dest.stem
 
     base = os.path.dirname(full_path)
     if not base.endswith("/"):
         base += "/"
-    base_length = len(base)
+    base_length = len(str(full_path) + "/")
 
     gen = []
 
@@ -98,7 +107,10 @@ def run():
             full = os.path.join(dirname, f)
             relative = full[base_length:]
             new_relative = transform(relative, relative, env_dict)
-            fn = os.path.join(dest, new_relative)
+            if new_relative:
+                fn = os.path.join(dest, new_relative)
+            else:
+                fn = dest
             gen.append(
                 NewFile(
                     filename=fn,
